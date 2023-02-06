@@ -8,7 +8,6 @@ const noteSchema = new mongoose.Schema({
   },
   date: {
     type: String,
-    required: true,
   },
   important: Boolean,
 })
