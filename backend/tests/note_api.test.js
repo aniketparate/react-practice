@@ -2,9 +2,11 @@ const supertest = require('supertest')
 const mongoose = require('mongoose')
 const helper = require('./test_helper')
 const app = require('../app')
+const bcrypt = require('bcrypt')
 
 const api = supertest(app) // app.js is Express application, app is wraped into superagent object
 const Note = require('../models/note')
+const User = require('../models/user')
 
 beforeEach(async () => {
   await Note.deleteMany({})
@@ -125,6 +127,60 @@ describe('deletion of a note', () => {
     const contents = notesAtEnd.map((r) => r.content)
 
     expect(contents).not.toContain(noteToDelete.content)
+  })
+})
+
+describe('when there is initially one user in db', () => {
+  beforeEach(async () => {
+    await User.deleteMany({})
+
+    const passwordHash = await bcrypt.hash('flame', 10)
+    const user = new User({ username: 'root', passwordHash })
+
+    await user.save()
+  })
+
+  test('creation succeeds with a fresh username', async () => {
+    const usersAtStart = await helper.userInDb()
+
+    const newUser = {
+      username: 'flame',
+      name: 'dark flame',
+      password: 'flame007',
+    }
+
+    await api
+      .post('/api/users')
+      .send(newUser)
+      .expect(201)
+      .expect('Content-Type', /application\/json/)
+
+    const usersAtEnd = await helper.userInDb()
+    expect(usersAtEnd).toHaveLength(usersAtStart.length + 1)
+
+    const usernames = usersAtEnd.map((u) => u.username)
+    expect(usernames).toContain(newUser.username)
+  })
+
+  test('creation fails with proper statuscode and message if username already taken', async () => {
+    const usersAtStart = await helper.userInDb()
+
+    const newUser = {
+      username: 'root',
+      name: 'Superuser',
+      password: 'dark',
+    }
+
+    const result = await api
+      .post('/api/users')
+      .send(newUser)
+      .expect(400)
+      .expect('Content-Type', /application\/json/)
+
+    expect(result.body.error).toContain('expected `username` to be unique')
+
+    const usersAtEnd = await helper.userInDb()
+    expect(usersAtEnd).toEqual(usersAtStart)
   })
 })
 
